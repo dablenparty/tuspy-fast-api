@@ -1,8 +1,9 @@
 import base64
 import json
 import os
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Callable, Optional
+from typing import Optional
 from uuid import uuid4
 
 from fastapi import Header, HTTPException, Response, Request, status, Depends, Path, APIRouter
@@ -10,8 +11,9 @@ from starlette.responses import FileResponse
 
 from tusserver.metadata import FileMetadata
 
+
 def default_auth():
-        pass
+    pass
 
 
 def create_api_router(
@@ -19,6 +21,7 @@ def create_api_router(
         location='http://127.0.0.1:8000/files',
         max_size=128849018880,
         on_upload_complete: Optional[Callable[[str, dict], None]] = None,
+        naming_function: Optional[Callable[[Request, dict[str, str | None]], str]] = None,
         auth: Optional[Callable[[], None]] = default_auth,
         days_to_keep: int = 5,
 ):
@@ -26,6 +29,12 @@ def create_api_router(
 
     tus_version = '1.0.0'
     tus_extension = 'creation,creation-defer-length,creation-with-upload,expiration,termination'
+
+    if naming_function is None:
+        # do not assign lambdas
+        def _nf(): return str(uuid4().hex)
+
+        naming_function = _nf
 
     async def _get_request_chunk(request: Request, uuid: str = Path(...), post_request: bool = False) -> bool | None:
         meta = _read_metadata(uuid)
@@ -106,6 +115,8 @@ def create_api_router(
             upload_defer_length: int = Header(None),
             _=Depends(auth)
     ) -> Response:
+        nonlocal naming_function
+
         if upload_defer_length is not None and upload_defer_length != 1:
             raise HTTPException(status_code=400, detail="Invalid Upload-Defer-Length")
 
@@ -120,7 +131,10 @@ def create_api_router(
                 decoded_value = base64.b64decode(value.strip()).decode("utf-8")
                 metadata[key.strip()] = decoded_value
 
-        uuid = str(uuid4().hex)
+        try:
+            uuid = naming_function(request, metadata)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error in naming_function: {e}")
 
         date_expiry = datetime.now() + timedelta(days=days_to_keep)
         saved_meta_data = FileMetadata.from_request(

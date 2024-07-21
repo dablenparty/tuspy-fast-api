@@ -26,7 +26,7 @@ def on_your_specific_auth():
 
 app.include_router(
     create_api_router(
-        files_dir='/tmp/different_dir',
+        files_dir='./images',
         location='http://127.0.0.1:8000/files',
         max_size=128849018880,
         on_upload_complete=on_upload_complete,

@@ -32,7 +32,7 @@ def create_api_router(
 
     if naming_function is None:
         # do not assign lambdas
-        def _nf(): return str(uuid4().hex)
+        def _nf(_, __): return str(uuid4().hex)
 
         naming_function = _nf
 
